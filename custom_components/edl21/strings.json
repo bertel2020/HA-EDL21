@@ -6,21 +6,38 @@
     },
     "error": {
       "cannot_connect": "Cannot read from this port or address",
-      "invalid_port": "Use the format socket://host:port"
+      "invalid_port": "Invalid host or port"
     },
     "step": {
       "user": {
         "title": "Add your EDL21 smart meter",
-        "description": "Serial port (e.g. /dev/ttyUSB0) or ser2net address (e.g. socket://192.168.1.10:2000).",
-        "data": {
-          "serial_port": "Serial port or socket:// address"
+        "description": "How is the reading head connected?",
+        "menu_options": {
+          "usb": "USB / serial device",
+          "tcp": "Network (ser2net / TCP)"
         }
       },
       "reconfigure": {
         "title": "Change connection",
-        "description": "Serial port (e.g. /dev/ttyUSB0) or ser2net address (e.g. socket://192.168.1.10:2000).",
+        "description": "How is the reading head connected?",
+        "menu_options": {
+          "usb": "USB / serial device",
+          "tcp": "Network (ser2net / TCP)"
+        }
+      },
+      "usb": {
+        "title": "USB / serial device",
+        "description": "Select the serial device of the reading head. Prefer the stable /dev/serial/by-id/… entry.",
         "data": {
-          "serial_port": "Serial port or socket:// address"
+          "serial_port": "Device"
+        }
+      },
+      "tcp": {
+        "title": "Network (ser2net / TCP)",
+        "description": "Address of the ser2net (or other raw TCP serial) server.",
+        "data": {
+          "host": "Host",
+          "port": "Port"
         }
       }
     }
@@ -134,6 +151,17 @@
       },
       "device_individual_id": {
         "name": "Device individual ID"
+      },
+      "reconnects": {
+        "name": "Reconnects"
+      },
+      "telegram_rate": {
+        "name": "Telegram rate"
+      }
+    },
+    "button": {
+      "test_connection": {
+        "name": "Test connection"
       }
     }
   },

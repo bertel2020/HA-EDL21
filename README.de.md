@@ -8,6 +8,7 @@
   <a href="https://github.com/hacs/integration"><img src="https://img.shields.io/badge/HACS-Custom-41BDF5.svg" alt="HACS Custom"></a>
   <a href="https://www.home-assistant.io/"><img src="https://img.shields.io/badge/Home%20Assistant-Custom%20Integration-18BCF2.svg?logo=home-assistant&logoColor=white" alt="Home Assistant"></a>
   <a href="https://github.com/bertel2020/HA-EDL21/releases"><img src="https://img.shields.io/github/v/release/bertel2020/HA-EDL21?sort=semver&include_prereleases" alt="Release"></a>
+  <a href="https://github.com/bertel2020/HA-EDL21/actions/workflows/validate.yml"><img src="https://github.com/bertel2020/HA-EDL21/actions/workflows/validate.yml/badge.svg" alt="Validate"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/bertel2020/HA-EDL21" alt="License"></a>
 </p>
 
@@ -24,11 +25,13 @@ optischen Lesekopf. Der Zähler kann direkt per USB oder über **ser2net**
 (`socket://host:port`) angebunden werden. Basiert auf der Core-Integration
 `edl21`, ergänzt um:
 
-- Einrichtung mit Verbindungsprüfung, Port nachträglich änderbar (**Neu konfigurieren**)
+- Einrichtung mit USB-Geräteauswahl oder ser2net-Host/Port, Verbindungsprüfung, Verbindung nachträglich änderbar (**Neu konfigurieren**)
 - einstellbares **Aktualisierungsintervall** und optionale **Mindeständerung** für Leistungssensoren
-- Diagnosesensor **Letztes Telegramm**; Sensoren werden *nicht verfügbar*, wenn der Lesekopf schweigt
+- Diagnosesensoren **Letztes Telegramm**, **Neuverbindungen** und **Telegrammrate** (standardmäßig deaktiviert); Sensoren werden *nicht verfügbar*, wenn der Lesekopf schweigt
+- Button **Verbindung testen**: wartet auf das nächste Telegramm und meldet dessen OBIS-Kennzahlen
 - **Reparaturhinweis**, wenn länger als 10 Minuten keine Daten ankommen
-- unbekannte OBIS-Kennzahlen als standardmäßig deaktivierte Sensoren
+- mehr OBIS-Kennzahlen als Core (Einspeiseleistung `2.7.0`, Tarif T3, Geräte-ID `96.1.1`); unbekannte Kennzahlen als standardmäßig deaktivierte Sensoren
+- Kennungen, Versionen und Statuswerte werden bei Änderung sofort geschrieben, Messwerte folgen dem Aktualisierungsintervall
 - Diagnose-Download (ohne Host, Port und Zähler-ID)
 - sauberes Entfernen von Eintrag und Gerät
 
@@ -49,6 +52,11 @@ Parsen der Telegramme fehl (`module 'bitstring' has no attribute
 fixiert diese Integration `bitstring==4.4.0` in der `manifest.json`. Ein
 Fehler mit diesem Text bedeutet, dass eine andere Integration eine neuere
 Version erzwingt.
+
+## Voraussetzungen
+
+Home Assistant 2026.10 oder neuer (Geräteauswahl und Options-Flow). Die Integration
+`usb` wird automatisch als Abhängigkeit geladen.
 
 ## Installation
 
@@ -74,9 +82,14 @@ kopieren und Home Assistant neu starten.
 
 ## Konfiguration
 
-Als Port einen Gerätepfad (z. B. `/dev/serial/by-id/…`) oder eine
-ser2net-Adresse (`socket://192.168.1.10:2000`) eintragen. Den Port später
-ändern: Eintrag öffnen → **Neu konfigurieren**.
+Beim Hinzufügen wählst du, wie der Lesekopf angeschlossen ist:
+
+- **USB- / serielles Gerät:** das Gerät aus der Liste auswählen (bevorzugt den
+  stabilen Eintrag `/dev/serial/by-id/…`).
+- **Netzwerk (ser2net / TCP):** Host und Port des ser2net-Servers eintragen
+  (gespeichert als `socket://host:port`).
+
+Die Verbindung später ändern: Eintrag öffnen → **Neu konfigurieren**.
 
 **Optionen** (Zahnrad am Eintrag):
 
@@ -85,7 +98,41 @@ ser2net-Adresse (`socket://192.168.1.10:2000`) eintragen. Den Port später
 | Aktualisierungsintervall | Wie oft pro Sensor höchstens ein neuer Wert geschrieben wird (1–3600 s, Standard 15). |
 | Mindeständerung Leistung | Leistungssensoren werden nur geschrieben, wenn sich der Wert um mindestens so viele Watt geändert hat (0 = aus). |
 
-Sensoren werden nach 3 Minuten ohne Telegramm *nicht verfügbar*.
+Sensoren werden nach 3 Minuten ohne Telegramm *nicht verfügbar*. Nach 10 Minuten
+ohne Daten erscheint ein Reparaturhinweis mit dem konfigurierten Port.
+
+## Unterstützte OBIS-Kennzahlen
+
+Energie `1.8.x` / `2.8.x` (gesamt, T1–T3), Leistung `1.7.0`, `2.7.0`, `15.7.0`,
+`16.7.0` und je Phase (`36/56/76.7.0`), Spannung und Strom je Phase, Netzfrequenz,
+Phasenwinkel, Zähler- und Geräte-IDs, Firmware- und Statuswerte. Unbekannte
+Kennzahlen erscheinen als deaktivierte Sensoren namens **OBIS …** und lassen sich
+einzeln aktivieren. Dein Zähler sendet meist nur einen Teil davon; die tatsächlich
+gesendeten Kennzahlen stehen im Diagnose-Download unter `seen_obis`.
+
+## Energie-Dashboard
+
+Diese Sensoren eintragen (Namen hängen von Sprache und Umbenennungen ab):
+
+| Dashboard-Feld | Sensor (OBIS) |
+|---|---|
+| Netzbezug | Wirkenergie Bezug gesamt (`1-0:1.8.0`) |
+| Einspeisung | Wirkenergie Einspeisung gesamt (`1-0:2.8.0`) |
+| Leistung (live) | Summe der momentanen Wirkleistung (`1-0:16.7.0`) |
+
+Beim Ersetzen der Core-Integration die bestehenden Entities behalten: Die
+Unique-IDs bleiben gleich, Historie und Dashboard-Konfiguration bleiben erhalten.
+Entities, die Home Assistant für alte Entity-IDs angelegt hat (Kosten-/Vergütungs-
+Sensoren des Energie-Dashboards), bleiben `unavailable` und können gelöscht werden.
+
+## Fehlersuche
+
+Den Diagnose-Button **Verbindung testen** drücken: Er wartet bis zu 15 Sekunden auf
+ein Telegramm und meldet die empfangenen OBIS-Kennzahlen in einer Benachrichtigung.
+Der Sensor **Neuverbindungen** zählt Wiederverbindungen; stetig steigende Werte
+deuten auf ein instabiles ser2net, Kabel oder einen defekten Lesekopf hin. Der
+**Diagnose-Download** enthält die `pysml`-Version, die Verbindungsart und die
+gesehenen OBIS-Kennzahlen, ohne Host, Port oder Zähler-ID.
 
 ## Haftungsausschluss
 

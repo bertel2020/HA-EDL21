@@ -3,3 +3,4 @@ __pycache__/
 .pytest_cache/
 .DS_Store
 config_entry-*.json
+.ruff_cache/

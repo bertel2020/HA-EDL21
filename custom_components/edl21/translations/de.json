@@ -6,21 +6,38 @@
     },
     "error": {
       "cannot_connect": "Port oder Adresse nicht erreichbar",
-      "invalid_port": "Format socket://host:port verwenden"
+      "invalid_port": "Ungültiger Host oder Port"
     },
     "step": {
       "user": {
         "title": "EDL21-Stromzähler hinzufügen",
-        "description": "Serieller Port (z. B. /dev/ttyUSB0) oder ser2net-Adresse (z. B. socket://192.168.1.10:2000).",
-        "data": {
-          "serial_port": "Serieller Port oder socket://-Adresse"
+        "description": "Wie ist der Lesekopf angeschlossen?",
+        "menu_options": {
+          "usb": "USB- / serielles Gerät",
+          "tcp": "Netzwerk (ser2net / TCP)"
         }
       },
       "reconfigure": {
         "title": "Verbindung ändern",
-        "description": "Serieller Port (z. B. /dev/ttyUSB0) oder ser2net-Adresse (z. B. socket://192.168.1.10:2000).",
+        "description": "Wie ist der Lesekopf angeschlossen?",
+        "menu_options": {
+          "usb": "USB- / serielles Gerät",
+          "tcp": "Netzwerk (ser2net / TCP)"
+        }
+      },
+      "usb": {
+        "title": "USB- / serielles Gerät",
+        "description": "Wähle das serielle Gerät des Lesekopfs. Bevorzuge den stabilen Eintrag /dev/serial/by-id/….",
         "data": {
-          "serial_port": "Serieller Port oder socket://-Adresse"
+          "serial_port": "Gerät"
+        }
+      },
+      "tcp": {
+        "title": "Netzwerk (ser2net / TCP)",
+        "description": "Adresse des ser2net-Servers (oder eines anderen seriellen Raw-TCP-Servers).",
+        "data": {
+          "host": "Host",
+          "port": "Port"
         }
       }
     }
@@ -134,6 +151,17 @@
       },
       "device_individual_id": {
         "name": "Geräteeinzelidentifikation"
+      },
+      "reconnects": {
+        "name": "Neuverbindungen"
+      },
+      "telegram_rate": {
+        "name": "Telegrammrate"
+      }
+    },
+    "button": {
+      "test_connection": {
+        "name": "Verbindung testen"
       }
     }
   },

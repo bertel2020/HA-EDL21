@@ -18,11 +18,12 @@ AVAILABILITY_TIMEOUT = 180  # seconds
 # A repair issue is raised after this long without a telegram.
 NO_DATA_ISSUE_AFTER = 600  # seconds
 CHECK_INTERVAL = 30  # seconds
-LAST_TELEGRAM_MIN_INTERVAL = 60  # seconds
+DIAGNOSTIC_MIN_INTERVAL = 60  # seconds
+TEST_TIMEOUT = 15  # seconds
 
 SIGNAL_EDL21_TELEGRAM = "edl21_telegram"
 SIGNAL_EDL21_AVAILABILITY = "edl21_availability"
-SIGNAL_EDL21_ALIVE = "edl21_alive"
+SIGNAL_EDL21_DIAGNOSTICS = "edl21_diagnostics"
 
 DEFAULT_TITLE = "Smart Meter"
 

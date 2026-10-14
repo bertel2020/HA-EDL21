@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import asyncio
+from collections import deque
 from datetime import timedelta
-from typing import Any
-
-from sml import SmlGetListResponse
-from sml.asyncio import SmlProtocol
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -18,6 +15,7 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     DEGREE,
+    EntityCategory,
     UnitOfElectricCurrent,
     UnitOfElectricPotential,
     UnitOfEnergy,
@@ -25,16 +23,17 @@ from homeassistant.const import (
     UnitOfPower,
 )
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.const import EntityCategory
 from homeassistant.helpers import issue_registry as ir
-from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import (
     async_dispatcher_connect,
     async_dispatcher_send,
 )
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.util.dt import utcnow
+from sml import SmlGetListResponse
+from sml.asyncio import SmlProtocol
 
 from .const import (
     AVAILABILITY_TIMEOUT,
@@ -42,16 +41,17 @@ from .const import (
     CONF_MIN_CHANGE,
     CONF_SERIAL_PORT,
     CONF_UPDATE_INTERVAL,
+    DEFAULT_DEVICE_NAME,
     DEFAULT_MIN_CHANGE,
     DEFAULT_UPDATE_INTERVAL,
-    LAST_TELEGRAM_MIN_INTERVAL,
-    NO_DATA_ISSUE_AFTER,
-    DEFAULT_DEVICE_NAME,
+    DIAGNOSTIC_MIN_INTERVAL,
     DOMAIN,
     LOGGER,
-    SIGNAL_EDL21_ALIVE,
+    NO_DATA_ISSUE_AFTER,
     SIGNAL_EDL21_AVAILABILITY,
+    SIGNAL_EDL21_DIAGNOSTICS,
     SIGNAL_EDL21_TELEGRAM,
+    TEST_TIMEOUT,
 )
 
 # OBIS format: A-B:C.D.E*F
@@ -325,11 +325,37 @@ STATIC_OBIS = {
     "1-0:96.5.0*255",
 }
 
-LAST_TELEGRAM_DESCRIPTION = SensorEntityDescription(
-    key="last_telegram",
-    translation_key="last_telegram",
-    device_class=SensorDeviceClass.TIMESTAMP,
-    entity_category=EntityCategory.DIAGNOSTIC,
+# (description, value function) for the per-meter diagnostic sensors
+DIAGNOSTIC_SENSORS = (
+    (
+        SensorEntityDescription(
+            key="last_telegram",
+            translation_key="last_telegram",
+            device_class=SensorDeviceClass.TIMESTAMP,
+            entity_category=EntityCategory.DIAGNOSTIC,
+        ),
+        lambda api: api.last_telegram,
+    ),
+    (
+        SensorEntityDescription(
+            key="reconnects",
+            translation_key="reconnects",
+            state_class=SensorStateClass.TOTAL_INCREASING,
+            entity_category=EntityCategory.DIAGNOSTIC,
+        ),
+        lambda api: api.reconnects,
+    ),
+    (
+        SensorEntityDescription(
+            key="telegram_rate",
+            translation_key="telegram_rate",
+            native_unit_of_measurement="telegrams/min",
+            state_class=SensorStateClass.MEASUREMENT,
+            entity_category=EntityCategory.DIAGNOSTIC,
+            entity_registry_enabled_default=False,
+        ),
+        lambda api: api.telegram_rate(),
+    ),
 )
 
 SENSOR_UNIT_MAPPING = {
@@ -353,9 +379,7 @@ async def async_setup_entry(
     config_entry.runtime_data = api
     config_entry.async_on_unload(api.disconnect)
     config_entry.async_on_unload(
-        async_track_time_interval(
-            hass, api.async_check, timedelta(seconds=CHECK_INTERVAL)
-        )
+        async_track_time_interval(hass, api.async_check, timedelta(seconds=CHECK_INTERVAL))
     )
     await api.connect()
 
@@ -392,16 +416,19 @@ class EDL21:
         self.min_change: float = options.get(CONF_MIN_CHANGE, DEFAULT_MIN_CHANGE)
         self.available = True
         self.last_telegram = None
+        self.reconnects = 0
+        self._telegram_times: deque = deque(maxlen=600)
+        self._waiters: list[asyncio.Future[list[str]]] = []
         # obis -> True if a known sensor exists, False if exposed as unknown
         self.seen_obis: dict[str, bool] = {}
         self.serial_port = config_entry.data[CONF_SERIAL_PORT]
         self.signal_availability = f"{SIGNAL_EDL21_AVAILABILITY}_{config_entry.entry_id}"
-        self.signal_alive = f"{SIGNAL_EDL21_ALIVE}_{config_entry.entry_id}"
+        self.signal_diagnostics = f"{SIGNAL_EDL21_DIAGNOSTICS}_{config_entry.entry_id}"
         self._issue_id = f"no_data_{config_entry.entry_id}"
         self._issue_active = False
         self._started = utcnow()
         self._registered_obis: set[tuple[str, str]] = set()
-        self._alive_entities: set[str] = set()
+        self._diagnostic_ids: set[str] = set()
         self._hass = hass
         self._async_add_entities = async_add_entities
         self._proto = SmlProtocol(self.serial_port)
@@ -410,7 +437,35 @@ class EDL21:
 
     async def connect(self) -> None:
         """Connect to an EDL21 reader."""
+        impl = self._proto._impl  # noqa: SLF001
+        if hasattr(impl, "_reconnect"):
+            original = impl._reconnect  # noqa: SLF001
+
+            async def counted(*args, **kwargs):
+                self.reconnects += 1
+                await original(*args, **kwargs)
+
+            impl._reconnect = counted  # noqa: SLF001
         await self._proto.connect(self._hass.loop)
+        self.reconnects = 0  # the initial connect is not a reconnect
+
+    def telegram_rate(self) -> int:
+        """Telegrams received during the last minute."""
+        limit = utcnow() - timedelta(seconds=60)
+        return sum(1 for stamp in self._telegram_times if stamp > limit)
+
+    async def async_test(self) -> list[str] | None:
+        """Wait for the next telegram; return its OBIS codes or None on timeout."""
+        waiter: asyncio.Future[list[str]] = self._hass.loop.create_future()
+        self._waiters.append(waiter)
+        try:
+            async with asyncio.timeout(TEST_TIMEOUT):
+                return await waiter
+        except TimeoutError:
+            return None
+        finally:
+            if waiter in self._waiters:
+                self._waiters.remove(waiter)
 
     async def disconnect(self) -> None:
         """Stop reading so unloading or removing the entry frees the port."""
@@ -431,6 +486,7 @@ class EDL21:
         """Mark sensors unavailable / raise a repair when no data arrives."""
         age = (utcnow() - (self.last_telegram or self._started)).total_seconds()
         self._set_available(age < AVAILABILITY_TIMEOUT)
+        async_dispatcher_send(self._hass, self.signal_diagnostics)
         if age >= NO_DATA_ISSUE_AFTER and not self._issue_active:
             self._issue_active = True
             ir.async_create_issue(
@@ -449,6 +505,12 @@ class EDL21:
         LOGGER.debug("Received sml message on %s: %s", self.serial_port, message_body)
 
         self.last_telegram = utcnow()
+        self._telegram_times.append(self.last_telegram)
+        if self._waiters:
+            obis_codes = [t["objName"] for t in message_body.get("valList", []) if t.get("objName")]
+            for waiter in self._waiters:
+                if not waiter.done():
+                    waiter.set_result(obis_codes)
         if self._issue_active:
             self._issue_active = False
             ir.async_delete_issue(self._hass, DOMAIN, self._issue_id)
@@ -456,26 +518,24 @@ class EDL21:
         electricity_id = message_body["serverId"]
 
         if electricity_id is None:
-            LOGGER.debug(
-                "No electricity id found in sml message on %s", self.serial_port
-            )
+            LOGGER.debug("No electricity id found in sml message on %s", self.serial_port)
             return
         electricity_id = electricity_id.replace(" ", "")
 
         new_entities: list[SensorEntity] = []
-        if electricity_id not in self._alive_entities:
-            self._alive_entities.add(electricity_id)
-            new_entities.append(EDL21LastTelegramEntity(self, electricity_id))
-        async_dispatcher_send(self._hass, self.signal_alive)
+        if electricity_id not in self._diagnostic_ids:
+            self._diagnostic_ids.add(electricity_id)
+            new_entities.extend(
+                EDL21DiagnosticEntity(self, electricity_id, description, value_fn)
+                for description, value_fn in DIAGNOSTIC_SENSORS
+            )
 
         for telegram in message_body.get("valList", []):
             if not (obis := telegram.get("objName")):
                 continue
 
             if (electricity_id, obis) in self._registered_obis:
-                async_dispatcher_send(
-                    self._hass, SIGNAL_EDL21_TELEGRAM, electricity_id, telegram
-                )
+                async_dispatcher_send(self._hass, SIGNAL_EDL21_TELEGRAM, electricity_id, telegram)
             elif obis not in self._OBIS_BLACKLIST:
                 entity_description = SENSORS.get(obis)
                 if entity_description is None:
@@ -505,35 +565,40 @@ def _device_info(electricity_id: str) -> DeviceInfo:
     )
 
 
-class EDL21LastTelegramEntity(SensorEntity):
-    """Diagnostic sensor: when the last telegram was received."""
+class EDL21DiagnosticEntity(SensorEntity):
+    """Diagnostic sensor of the reader (last telegram, reconnects, rate)."""
 
     _attr_should_poll = False
     _attr_has_entity_name = True
-    entity_description = LAST_TELEGRAM_DESCRIPTION
 
-    def __init__(self, api: EDL21, electricity_id: str) -> None:
+    def __init__(self, api: EDL21, electricity_id: str, description, value_fn) -> None:
         """Initialize the sensor."""
         self._api = api
-        self._attr_unique_id = f"{electricity_id}_last_telegram"
+        self._value_fn = value_fn
+        self.entity_description = description
+        self._attr_unique_id = f"{electricity_id}_{description.key}"
         self._attr_device_info = _device_info(electricity_id)
-        self._attr_native_value = api.last_telegram
+        self._attr_native_value = value_fn(api)
         self._last_write = utcnow()
 
     async def async_added_to_hass(self) -> None:
-        """Subscribe to telegram arrivals."""
+        """Refresh on the periodic diagnostics signal."""
 
         @callback
-        def handle_alive() -> None:
+        def handle_refresh() -> None:
+            value = self._value_fn(self._api)
+            if value == self._attr_native_value:
+                return
             now = utcnow()
-            if (now - self._last_write).total_seconds() < LAST_TELEGRAM_MIN_INTERVAL:
+            due = (now - self._last_write).total_seconds() >= DIAGNOSTIC_MIN_INTERVAL
+            if not due and self.entity_description.key != "reconnects":
                 return
             self._last_write = now
-            self._attr_native_value = self._api.last_telegram
+            self._attr_native_value = value
             self.async_write_ha_state()
 
         self.async_on_remove(
-            async_dispatcher_connect(self.hass, self._api.signal_alive, handle_alive)
+            async_dispatcher_connect(self.hass, self._api.signal_diagnostics, handle_refresh)
         )
 
 
@@ -573,9 +638,7 @@ class EDL21Entity(SensorEntity):
                 return
 
             now = utcnow()
-            static = self._obis in STATIC_OBIS or isinstance(
-                telegram.get("value"), str
-            )
+            static = self._obis in STATIC_OBIS or isinstance(telegram.get("value"), str)
             if not static and now - self._last_update < self._api.min_time:
                 return
             if (
@@ -583,10 +646,8 @@ class EDL21Entity(SensorEntity):
                 and self.entity_description.device_class == SensorDeviceClass.POWER
             ):
                 try:
-                    delta = abs(
-                        float(telegram.get("value")) - float(self._telegram.get("value"))
-                    )
-                except (TypeError, ValueError):
+                    delta = abs(float(telegram.get("value")) - float(self._telegram.get("value")))
+                except TypeError, ValueError:
                     delta = None
                 if delta is not None and delta < self._api.min_change:
                     return
@@ -603,9 +664,7 @@ class EDL21Entity(SensorEntity):
             async_dispatcher_connect(self.hass, SIGNAL_EDL21_TELEGRAM, handle_telegram)
         )
         self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass, self._api.signal_availability, handle_availability
-            )
+            async_dispatcher_connect(self.hass, self._api.signal_availability, handle_availability)
         )
 
     @property

@@ -8,6 +8,7 @@
   <a href="https://github.com/hacs/integration"><img src="https://img.shields.io/badge/HACS-Custom-41BDF5.svg" alt="HACS Custom"></a>
   <a href="https://www.home-assistant.io/"><img src="https://img.shields.io/badge/Home%20Assistant-Custom%20Integration-18BCF2.svg?logo=home-assistant&logoColor=white" alt="Home Assistant"></a>
   <a href="https://github.com/bertel2020/HA-EDL21/releases"><img src="https://img.shields.io/github/v/release/bertel2020/HA-EDL21?sort=semver&include_prereleases" alt="Release"></a>
+  <a href="https://github.com/bertel2020/HA-EDL21/actions/workflows/validate.yml"><img src="https://github.com/bertel2020/HA-EDL21/actions/workflows/validate.yml/badge.svg" alt="Validate"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/bertel2020/HA-EDL21" alt="License"></a>
 </p>
 
@@ -23,11 +24,13 @@ Custom integration for electricity meters with an SML interface (EDL21), e.g.
 via an optical reading head. Connect it directly via USB or through **ser2net**
 (`socket://host:port`). Based on the core `edl21` integration, with:
 
-- setup with connection check, port changeable later (**Reconfigure**)
+- setup with a USB device picker or ser2net host/port, connection check, connection changeable later (**Reconfigure**)
 - configurable **update interval** and optional **minimum change** for power sensors
-- diagnostic sensor **Last telegram**; sensors become *unavailable* when the reading head is silent
+- diagnostic sensors **Last telegram**, **Reconnects** and **Telegram rate** (disabled by default); sensors become *unavailable* when the reading head is silent
+- **Test connection** button: waits for the next telegram and reports its OBIS codes
 - **repair issue** when no data arrives for more than 10 minutes
-- unknown OBIS codes exposed as sensors that are disabled by default
+- more OBIS codes than core (feed-in power `2.7.0`, tariff T3, device ID `96.1.1`); unknown codes are exposed as sensors that are disabled by default
+- identifiers, versions and status values are updated immediately on change, measurements follow the update interval
 - diagnostics download (without host, port and meter ID)
 - clean removal of entry and device
 
@@ -46,6 +49,11 @@ parsing telegrams fails (`module 'bitstring' has no attribute
 'ConstBitStream'`) and the connection is re-established over and over. This
 integration therefore pins `bitstring==4.4.0` in `manifest.json`. An error
 with this text means another integration forces a newer version.
+
+## Requirements
+
+Home Assistant 2026.10 or newer (device picker and options flow). The `usb`
+integration is loaded automatically as a dependency.
 
 ## Installation
 
@@ -69,9 +77,14 @@ and restart Home Assistant.
 
 ## Configuration
 
-Enter a device path (e.g. `/dev/serial/by-id/…`) or a ser2net address
-(`socket://192.168.1.10:2000`) as port. To change it later, open the entry and
-choose **Reconfigure**.
+When adding the integration, choose how the reading head is connected:
+
+- **USB / serial device:** pick the device from the list (prefer the stable
+  `/dev/serial/by-id/…` entry).
+- **Network (ser2net / TCP):** enter host and port of the ser2net server
+  (stored as `socket://host:port`).
+
+To change the connection later, open the entry and choose **Reconfigure**.
 
 **Options** (cog on the entry):
 
@@ -80,7 +93,41 @@ choose **Reconfigure**.
 | Update interval | Maximum rate at which a sensor gets a new value (1–3600 s, default 15). |
 | Minimum power change | Power sensors are only written when the value changed by at least this many watts (0 = off). |
 
-Sensors become *unavailable* after 3 minutes without a telegram.
+Sensors become *unavailable* after 3 minutes without a telegram. After 10
+minutes without data a repair issue with the configured port appears.
+
+## Supported OBIS codes
+
+Energy `1.8.x` / `2.8.x` (total, T1–T3), power `1.7.0`, `2.7.0`, `15.7.0`,
+`16.7.0` and per phase (`36/56/76.7.0`), voltage and current per phase, supply
+frequency, phase angles, meter and device IDs, firmware and status values.
+Codes that are not known appear as disabled sensors named **OBIS …** and can be
+enabled individually. Your meter usually only sends a subset; the codes it actually
+sends are listed in the diagnostics download under `seen_obis`.
+
+## Energy dashboard
+
+Use these sensors (names depend on your language and renames):
+
+| Dashboard field | Sensor (OBIS) |
+|---|---|
+| Grid consumption | Positive active energy total (`1-0:1.8.0`) |
+| Return to grid | Negative active energy total (`1-0:2.8.0`) |
+| Power (live) | Sum active instantaneous power (`1-0:16.7.0`) |
+
+If you replace the core integration, keep the existing entities: the unique IDs
+stay the same, so history and the dashboard configuration are preserved. Entities
+that Home Assistant created for old entity IDs (cost/compensation sensors of the
+energy dashboard) stay `unavailable` and can be deleted.
+
+## Troubleshooting
+
+Press **Test connection** (diagnostic button): it waits up to 15 seconds for a
+telegram and reports the received OBIS codes in a notification. The **Reconnects**
+sensor counts re-connections; steadily rising values point to an unstable
+ser2net, cable or reading head. The **Download diagnostics** function contains
+the `pysml` version, connection type and seen OBIS codes, without host, port or
+meter ID.
 
 ## Disclaimer
 
