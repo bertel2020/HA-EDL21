@@ -1,0 +1,158 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Zähler ist bereits eingerichtet",
+      "reconfigure_successful": "Verbindung aktualisiert"
+    },
+    "error": {
+      "cannot_connect": "Port oder Adresse nicht erreichbar",
+      "invalid_port": "Format socket://host:port verwenden"
+    },
+    "step": {
+      "user": {
+        "title": "EDL21-Stromzähler hinzufügen",
+        "description": "Serieller Port (z. B. /dev/ttyUSB0) oder ser2net-Adresse (z. B. socket://192.168.1.10:2000).",
+        "data": {
+          "serial_port": "Serieller Port oder socket://-Adresse"
+        }
+      },
+      "reconfigure": {
+        "title": "Verbindung ändern",
+        "description": "Serieller Port (z. B. /dev/ttyUSB0) oder ser2net-Adresse (z. B. socket://192.168.1.10:2000).",
+        "data": {
+          "serial_port": "Serieller Port oder socket://-Adresse"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "absolute_active_instantaneous_power": {
+        "name": "Betrag der momentanen Wirkleistung"
+      },
+      "configuration_program_version_number": {
+        "name": "Versionsnummer des Konfigurationsprogramms"
+      },
+      "electricity_id": {
+        "name": "Stromzähler-ID"
+      },
+      "firmware_version_number": {
+        "name": "Firmware-Version"
+      },
+      "internal_operating_status": {
+        "name": "Interner Betriebsstatus"
+      },
+      "l1_active_instantaneous_amperage": {
+        "name": "Momentane Stromstärke L1"
+      },
+      "l1_active_instantaneous_power": {
+        "name": "Momentane Wirkleistung L1"
+      },
+      "l1_active_instantaneous_voltage": {
+        "name": "Momentane Spannung L1"
+      },
+      "l2_active_instantaneous_amperage": {
+        "name": "Momentane Stromstärke L2"
+      },
+      "l2_active_instantaneous_power": {
+        "name": "Momentane Wirkleistung L2"
+      },
+      "l2_active_instantaneous_voltage": {
+        "name": "Momentane Spannung L2"
+      },
+      "l3_active_instantaneous_amperage": {
+        "name": "Momentane Stromstärke L3"
+      },
+      "l3_active_instantaneous_power": {
+        "name": "Momentane Wirkleistung L3"
+      },
+      "l3_active_instantaneous_voltage": {
+        "name": "Momentane Spannung L3"
+      },
+      "last_signed_positive_active_energy_total": {
+        "name": "Letzte signierte Wirkenergie Bezug gesamt"
+      },
+      "metering_point_id_1": {
+        "name": "Messstellen-ID 1"
+      },
+      "negative_active_energy_tariff_t1": {
+        "name": "Wirkenergie Einspeisung Tarif T1"
+      },
+      "negative_active_energy_tariff_t2": {
+        "name": "Wirkenergie Einspeisung Tarif T2"
+      },
+      "negative_active_energy_total": {
+        "name": "Wirkenergie Einspeisung gesamt"
+      },
+      "ownership_id": {
+        "name": "Eigentums-ID"
+      },
+      "positive_active_energy_tariff_t1": {
+        "name": "Wirkenergie Bezug Tarif T1"
+      },
+      "positive_active_energy_tariff_t2": {
+        "name": "Wirkenergie Bezug Tarif T2"
+      },
+      "positive_active_energy_total": {
+        "name": "Wirkenergie Bezug gesamt"
+      },
+      "positive_active_instantaneous_power": {
+        "name": "Momentane Wirkleistung Bezug"
+      },
+      "sum_active_instantaneous_power": {
+        "name": "Summe der momentanen Wirkleistung"
+      },
+      "supply_frequency": {
+        "name": "Netzfrequenz"
+      },
+      "u_l1_i_l1_phase_angle": {
+        "name": "Phasenwinkel U(L1)/I(L1)"
+      },
+      "u_l2_i_l2_phase_angle": {
+        "name": "Phasenwinkel U(L2)/I(L2)"
+      },
+      "u_l2_u_l1_phase_angle": {
+        "name": "Phasenwinkel U(L2)/U(L1)"
+      },
+      "u_l3_i_l3_phase_angle": {
+        "name": "Phasenwinkel U(L3)/I(L3)"
+      },
+      "u_l3_u_l1_phase_angle": {
+        "name": "Phasenwinkel U(L3)/U(L1)"
+      },
+      "last_telegram": {
+        "name": "Letztes Telegramm"
+      },
+      "positive_active_energy_tariff_t3": {
+        "name": "Wirkenergie Bezug Tarif T3"
+      },
+      "negative_active_energy_tariff_t3": {
+        "name": "Wirkenergie Einspeisung Tarif T3"
+      },
+      "negative_active_instantaneous_power": {
+        "name": "Momentane Wirkleistung Einspeisung"
+      },
+      "device_individual_id": {
+        "name": "Geräteeinzelidentifikation"
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Aktualisierungsintervall",
+        "description": "Wie oft (in Sekunden) neue Zählerwerte in die Sensoren geschrieben und aufgezeichnet werden. Leistungssensoren werden nur aktualisiert, wenn sich der Wert um mindestens die Mindeständerung geändert hat (0 = immer).",
+        "data": {
+          "update_interval": "Intervall",
+          "min_change": "Mindeständerung Leistung"
+        }
+      }
+    }
+  },
+  "issues": {
+    "no_data": {
+      "title": "Keine Daten vom Stromzähler",
+      "description": "EDL21 hat seit über 10 Minuten keine Daten vom Lesekopf an {port} erhalten. Prüfe Lesekopf, USB-/ser2net-Verbindung und den konfigurierten Port. Der Hinweis verschwindet, sobald wieder Daten ankommen."
+    }
+  }
+}

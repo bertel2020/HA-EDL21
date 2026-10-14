@@ -1,0 +1,14 @@
+{
+  "domain": "edl21",
+  "name": "EDL21",
+  "codeowners": ["@bertel2020"],
+  "config_flow": true,
+  "dependencies": ["usb"],
+  "documentation": "https://github.com/bertel2020/HA-EDL21",
+  "integration_type": "hub",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/bertel2020/HA-EDL21/issues",
+  "loggers": ["sml"],
+  "requirements": ["pysml==0.1.8", "bitstring==4.4.0"],
+  "version": "1.2.1"
+}
